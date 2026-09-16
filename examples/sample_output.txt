@@ -1,0 +1,155 @@
+
+==============================================================================
+1. Research run for Harbor Freight Rail Co.
+==============================================================================
+  prioritize (D1): execution priority 0.78, depth deep
+    [tool] regulatory  depth=deep attempt=0 -> 3 documents snapshotted
+    [llm] ExtractionResult       openai/gpt-5-nano                 398 in /  467 out  $0.00021
+  research_branch: 3 claims, 0 stakeholders
+    [tool] stakeholder depth=deep attempt=0 -> 1 documents snapshotted
+    [llm] ExtractionResult       openai/gpt-5-nano                 184 in /  267 out  $0.00012
+    [tool] news        depth=deep attempt=0 -> 2 documents snapshotted
+    [llm] ExtractionResult       openai/gpt-5-nano                 272 in /  464 out  $0.00020
+  research_branch: 0 claims, 3 stakeholders
+  research_branch: 3 claims, 0 stakeholders
+    rejected news:0:c2: evidence excerpt is not a verbatim quote of the source
+  validate (D2):
+    claim news:0:c1         verified     
+    claim news:0:c2         rejected       (evidence excerpt is not a verbatim quote of the source)
+    claim news:0:c3         needs_review   (source class SECONDARY_UNKNOWN cannot reach outreach)
+    claim regulatory:0:c1   verified     
+    claim regulatory:0:c2   verified     
+    claim regulatory:0:c3   rejected       (older than 540 days)
+    person Morgan Diaz      rejected       (company domain does not match account; not verified in 90 days)
+    person Dana Okafor      verified     
+    person Lee Park         verified     
+    [llm] ResearchJudgeVerdict   google/gemini-3.8-flash           373 in /   46 out  $0.00045
+  research_judge: rejected regulatory:0:c2: research judge: excerpt does not support statement
+  research_judge: branches to re-research: none
+  score (D3): account priority 0.606, evidence confidence 0.7667
+    [llm] AccountBrief           google/gemini-3.8-flash           311 in /  119 out  $0.00068
+  synthesize: angle = 'Crew size is moving in Congress and in Ohio and Iowa at the same time.', cites ['regulatory:0:c1', 'news:0:c1']
+    [llm] OutreachDraft          google/gemini-3.8-flash        -> provider unavailable, trying fallback
+    [llm] OutreachDraft          openai/gpt-5.4-mini              1575 in /   68 out  $0.00149
+  personalize (attempt 1): 'Crew size in Congress, Ohio and Iowa', cites ['regulatory:0:c1', 'news:0:c9']
+  delivery_judge: passed=False groundedness=1 relevance=1 tone=1 -> rewrite
+    critique: Cited ids not in the context: ['news:0:c9']. Use only the given ids.
+    [llm] OutreachDraft          google/gemini-3.8-flash        -> provider unavailable, trying fallback
+    [llm] OutreachDraft          openai/gpt-5.4-mini              1683 in /  164 out  $0.00200
+  personalize (attempt 2): 'Crew size in Congress, Ohio and Iowa', cites ['regulatory:0:c1', 'news:0:c1']
+    [llm] DeliveryJudgeVerdict   mistralai/mistral-large-2512      524 in /   38 out  $0.00032
+  delivery_judge: passed=True groundedness=5 relevance=5 tone=4 -> ready_for_review
+    critique: Grounded and specific. Could be one sentence shorter.
+    [mongo] research_runs + salesforce_outbox written for run-001 (one transaction)
+    [slack] review card posted: outcome=ready_for_review, sources=2
+  finalize: done
+
+==============================================================================
+2. Result the SDR reviews
+==============================================================================
+outcome: ready_for_review
+models: {
+  "extraction:regulatory": "openai/gpt-5-nano",
+  "extraction:stakeholder": "openai/gpt-5-nano",
+  "extraction:news": "openai/gpt-5-nano",
+  "research_judge": "google/gemini-3.8-flash",
+  "synthesis": "google/gemini-3.8-flash",
+  "personalization": "openai/gpt-5.4-mini",
+  "delivery_judge": "mistralai/mistral-large-2512"
+}
+
+To: Dana Okafor
+Subject: Crew size in Congress, Ohio and Iowa
+
+Hi Dana,
+
+Your team lobbied on H.R. 9001 in Q1 and testified in Ohio and Iowa on crew size bills with the Safe Rail Coalition. Keeping the federal bill and each state version in view at once is where the hours go.
+
+Quorum tracks bills across Congress and all 50 states with alerts by issue, and links each hearing and testimony to the bill it relates to.
+
+Would a one-page view of crew size bills by state help before your next hearing?
+
+{{sdr_first_name}}
+
+cited claims: ['regulatory:0:c1', 'news:0:c1']
+cited KB: ['kb-state-tracking', 'kb-testimony']
+
+==============================================================================
+3. SDR asks for a draft-only rerun from Slack
+==============================================================================
+    [llm] OutreachDraft          google/gemini-3.8-flash        -> provider unavailable, trying fallback
+    [llm] OutreachDraft          openai/gpt-5.4-mini              1598 in /  106 out  $0.00168
+    [llm] DeliveryJudgeVerdict   mistralai/mistral-large-2512      466 in /   38 out  $0.00029
+    [mongo] research_runs + salesforce_outbox written for run-002 (one transaction)
+    [slack] review card posted: outcome=ready_for_review, sources=2
+  new run run-002, parent run-001, outcome ready_for_review
+  tool calls in rerun: 0; LLM calls in rerun: 2 (draft + judge only)
+
+Subject: Your Ohio and Iowa crew size testimony
+
+Hi Dana,
+
+You testified in Ohio and Iowa on crew size bills while H.R. 9001 moves in Congress. Quorum links each hearing to its bill and tracks all 50 states by issue.
+
+Worth a look before the next hearing?
+
+{{sdr_first_name}}
+
+==============================================================================
+4. Salesforce sync through the outbox
+==============================================================================
+  batch 1:
+    [outbox] ob-run-001: transient error, retry 1 at 12:00:30 UTC: account: HTTP 400 ['UNABLE_TO_LOCK_ROW'] ['unable to obtain exclusive access to this record']
+    [outbox] ob-run-002: synced
+  batch 2 (after backoff): run-002 already synced, so the older run-001 must not overwrite it
+    [outbox] ob-run-001: superseded by a newer synced run
+
+  last Composite API request sent:
+  {
+    "allOrNone": true,
+    "compositeRequest": [
+      {
+        "method": "PATCH",
+        "url": "/services/data/v66.0/sobjects/Account/001Hx00000FAKE1AAA",
+        "referenceId": "account",
+        "body": {
+          "AI_Research_Status__c": "Ready for Review",
+          "AI_Priority_Score__c": 0.61,
+          "AI_Evidence_Confidence__c": 0.77,
+          "AI_Research_Summary__c": "Harbor Freight Rail lobbies federally on crew size (H.R. 9001) and advocates on the same issue in state legislatures through the Safe Rail Coalition.",
+          "AI_Commercial_Hypothesis__c": "The government affairs team tracks one issue across Congress and several states at once, which is manual work that grows with every new state bill.",
+          "AI_Outreach_Angle__c": "Crew size is moving in Congress and in Ohio and Iowa at the same time.",
+          "AI_Research_Run_Id__c": "run-002",
+          "AI_Last_Researched_At__c": "2026-09-16T12:00:00+00:00"
+        }
+      },
+      {
+        "method": "PATCH",
+        "url": "/services/data/v66.0/sobjects/AI_Outreach_Draft__c/Run_Id__c/run-002",
+        "referenceId": "draft",
+        "body": {
+          "Account__c": "001Hx00000FAKE1AAA",
+          "Contact__c": "003Hx00000FAKE1AAA",
+          "Stakeholder_Name__c": "Dana Okafor",
+          "Stakeholder_Title__c": "Vice President, Government Affairs",
+          "Subject__c": "Your Ohio and Iowa crew size testimony",
+          "Body__c": "Hi Dana,\n\nYou testified in Ohio and Iowa on crew size bills while H.R. 9001 moves in Congress. Quorum links each hearing to its bill and tracks all 50 states by issue.\n\nWorth a look before the next hearing?\n\n{{sdr_first_name}}",
+          "Cited_Sources__c": "https://lda.example.gov/filings/HFR-2026-Q1\nhttps://railweek.example/2026/07/crew-size-coalition",
+          "Judge_Passed__c": true,
+          "Judge_Critique__c": "Grounded and specific. Could be one sentence shorter.",
+          "Parent_Run_Id__c": "run-001"
+        }
+      }
+    ]
+  }
+
+==============================================================================
+5. Mock cost of run-001 (token estimate x OpenRouter prices)
+==============================================================================
+  ExtractionResult       $0.00052
+  ResearchJudgeVerdict   $0.00045
+  AccountBrief           $0.00068
+  OutreachDraft          $0.00349
+  DeliveryJudgeVerdict   $0.00032
+  total LLM              $0.00546  (8 calls)
+  Excludes search/enrichment APIs. Mock prompts are shorter than real ones, so real cost is higher.

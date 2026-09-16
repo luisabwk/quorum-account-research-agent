@@ -19,7 +19,7 @@ packages = ["account_research_agent"]
 
 [tool.ruff]
 line-length = 120
-include = ["account_research_agent/**/*.py", "tests/**/*.py"]
+include = ["account_research_agent/**/*.py", "tests/**/*.py", "examples/**/*.py"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "N", "SIM", "RUF"]
@@ -27,6 +27,8 @@ select = ["E", "F", "I", "B", "UP", "N", "SIM", "RUF"]
 [tool.ruff.lint.per-file-ignores]
 # Few-shot examples are prompt text; wrapping them would change what the model sees.
 "account_research_agent/prompts.py" = ["E501"]
+# Mock data reads better as long literal lines.
+"examples/*.py" = ["E501"]
 
 [tool.mypy]
 strict = true

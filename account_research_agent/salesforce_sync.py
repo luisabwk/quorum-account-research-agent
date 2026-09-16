@@ -13,11 +13,13 @@ A Salesforce outage delays the write. It never loses research.
 from __future__ import annotations
 
 import random
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Protocol, TypedDict
+from urllib.parse import quote
 
 from pydantic import BaseModel
 
@@ -30,6 +32,7 @@ MAX_BACKOFF = timedelta(hours=1)
 LEASE = timedelta(minutes=5)
 
 JsonValue = str | int | float | bool | None
+SALESFORCE_ID = re.compile(r"[a-zA-Z0-9]{15}(?:[a-zA-Z0-9]{3})?")
 
 
 class SalesforceTransientError(Exception):
@@ -67,6 +70,7 @@ class CompositeRequest(TypedDict):
 
 
 class Kind(StrEnum):
+    ID = "id"
     TEXT = "text"
     NUMBER = "number"
     PICKLIST = "picklist"
@@ -112,12 +116,11 @@ ACCOUNT_FIELDS: tuple[FieldSpec, ...] = (
 )
 
 DRAFT_FIELDS: tuple[FieldSpec, ...] = (
-    FieldSpec("Account__c", Kind.TEXT, lambda r: r.salesforce_account_id, max_length=18),
+    FieldSpec("Account__c", Kind.ID, lambda r: r.salesforce_account_id),
     FieldSpec(
         "Contact__c",
-        Kind.TEXT,
+        Kind.ID,
         lambda r: r.draft_stakeholder.salesforce_contact_id if r.draft_stakeholder else None,
-        max_length=18,
     ),
     FieldSpec(
         "Stakeholder_Name__c",
@@ -153,6 +156,13 @@ def transform(spec: FieldSpec, value: object) -> tuple[JsonValue, str | None]:
     """
     if value is None:
         return None, None
+    if spec.kind is Kind.ID:
+        # Reason: a truncated record id points at the wrong record or none.
+        # An id is either valid or a mapping error, never shortened.
+        text = str(value)
+        if not SALESFORCE_ID.fullmatch(text):
+            raise MappingError(f"{spec.sf_field}: {text!r} is not a 15 or 18 character Salesforce id")
+        return text, None
     if spec.kind is Kind.TEXT:
         text = str(value)
         if spec.max_length is not None and len(text) > spec.max_length:
@@ -192,11 +202,17 @@ def map_fields(specs: tuple[FieldSpec, ...], result: ResearchResult) -> tuple[di
 
 def build_composite(result: ResearchResult) -> tuple[CompositeRequest, list[str]]:
     base = f"/services/data/{API_VERSION}/sobjects"
+    # Reason: the account id also goes into the URL path, so it gets the same
+    # check as the Account__c field; the run id is escaped for the same reason.
+    account_id, _ = transform(
+        FieldSpec("Account (URL)", Kind.ID, lambda r: r.salesforce_account_id), result.salesforce_account_id
+    )
+    run_id = quote(result.run_id, safe="")
     account_body, warnings = map_fields(ACCOUNT_FIELDS, result)
     requests: list[CompositeSubRequest] = [
         {
             "method": "PATCH",
-            "url": f"{base}/Account/{result.salesforce_account_id}",
+            "url": f"{base}/Account/{account_id}",
             "referenceId": "account",
             "body": account_body,
         }
@@ -209,7 +225,7 @@ def build_composite(result: ResearchResult) -> tuple[CompositeRequest, list[str]
         requests.append(
             {
                 "method": "PATCH",
-                "url": f"{base}/AI_Outreach_Draft__c/Run_Id__c/{result.run_id}",
+                "url": f"{base}/AI_Outreach_Draft__c/Run_Id__c/{run_id}",
                 "referenceId": "draft",
                 "body": draft_body,
             }

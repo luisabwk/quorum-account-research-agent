@@ -9,7 +9,13 @@ from langgraph.types import RetryPolicy
 
 from account_research_agent.llm import ModelRouter, PermanentToolError, TransientError
 from account_research_agent.nodes import Deps
-from account_research_agent.orchestrator import RerunLimitExceededError, compile_app, rerun, run_account
+from account_research_agent.orchestrator import (
+    RerunLimitExceededError,
+    checkpoint_serializer,
+    compile_app,
+    rerun,
+    run_account,
+)
 from account_research_agent.schemas import (
     AccountBrief,
     Branch,
@@ -116,7 +122,14 @@ def harness() -> Harness:
         documents={Branch.REGULATORY: [REG_DOC], Branch.STAKEHOLDER: [PEOPLE_DOC], Branch.NEWS: [NEWS_DOC]}
     )
     deps = Deps(router=ModelRouter(gateway), tools=tools, kb=FakeKB(), repo=repo, review=review, now=lambda: NOW)
-    return Harness(gateway, tools, repo, review, deps, compile_app(deps, InMemorySaver(), retry=FAST_RETRY))
+    return Harness(
+        gateway,
+        tools,
+        repo,
+        review,
+        deps,
+        compile_app(deps, InMemorySaver(serde=checkpoint_serializer()), retry=FAST_RETRY),
+    )
 
 
 def ready_harness() -> Harness:
@@ -261,7 +274,7 @@ def _finished_parent() -> Harness:
     return h
 
 
-def test_draft_only_rerun_reuses_evidence_and_carries_feedback() -> None:
+def test_draft_only_rerun_reuses_evidence_and_carries_feedback(caplog: pytest.LogCaptureFixture) -> None:
     h = _finished_parent()
     h.gateway.queue(OutreachDraft, draft())
     h.gateway.queue(DeliveryJudgeVerdict, GOOD_VERDICT)
@@ -278,6 +291,8 @@ def test_draft_only_rerun_reuses_evidence_and_carries_feedback() -> None:
     assert [t for _, t, _ in h.gateway.calls] == ["OutreachDraft", "DeliveryJudgeVerdict"]
     assert "<reviewer_feedback>Shorter please</reviewer_feedback>" in h.gateway.calls[0][2][-1].content
     assert state["parent_run_id"] == "parent" and h.repo.saved[-1].run_id == "child"
+    # Every checkpoint type is on the allowlist, so reading the parent logs no warning.
+    assert "unregistered type" not in caplog.text
 
 
 def test_one_branch_rerun_only_researches_that_branch() -> None:

@@ -165,6 +165,7 @@ def test_long_text_is_truncated_with_a_visible_warning() -> None:
         (ACCOUNT_FIELDS[0], "archived"),  # unknown picklist value
         (FieldSpec("T__c", Kind.DATETIME, lambda r: None), datetime(2026, 9, 16)),  # naive datetime
         (FieldSpec("N__c", Kind.NUMBER, lambda r: None), "0.8"),
+        (FieldSpec("Account__c", Kind.ID, lambda r: None), "001000000000001AAAX"),  # 19 chars: never truncated
     ],
 )
 def test_bad_values_raise_mapping_error(spec: FieldSpec, value: object) -> None:
@@ -218,3 +219,13 @@ def test_older_run_does_not_overwrite_newer_sync() -> None:
     client = FakeClient([])
     run(store, client)
     assert store.events == [("superseded", "ob-1")] and client.requests == []
+
+
+def test_invalid_account_id_fails_before_it_reaches_the_url() -> None:
+    with pytest.raises(MappingError, match="Account"):
+        build_composite(result(salesforce_account_id="001/../../Contact/003"))
+
+
+def test_run_id_is_escaped_in_the_upsert_url() -> None:
+    request, _ = build_composite(result(run_id="run 1/2"))
+    assert request["compositeRequest"][1]["url"].endswith("/Run_Id__c/run%201%2F2")

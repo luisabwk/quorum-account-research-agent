@@ -23,11 +23,12 @@ from typing import cast
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import RetryPolicy
 
-from . import nodes
+from . import nodes, schemas
 from .llm import TransientError
 from .nodes import Deps
 from .schemas import AccountInput, Branch, BranchTask, RerunRequest, RerunScope, ResearchDepth, ResearchState
@@ -41,6 +42,31 @@ TRANSIENT_RETRY = RetryPolicy(max_attempts=3, initial_interval=1.0, backoff_fact
 
 class RerunLimitExceededError(Exception):
     pass
+
+
+# Types stored in checkpoints. Reason: LangGraph deserializes checkpoints by
+# importing the class named in the data. An explicit allowlist means a tampered
+# checkpoint cannot make it import anything else; the default only warns, and
+# a future LangGraph release blocks unlisted types, which would break reruns.
+CHECKPOINT_TYPES = (
+    schemas.AccountInput,
+    schemas.AccountBrief,
+    schemas.Branch,
+    schemas.Claim,
+    schemas.ClaimType,
+    schemas.DeliveryJudgeVerdict,
+    schemas.EvidenceStatus,
+    schemas.KBPassage,
+    schemas.OutreachDraft,
+    schemas.ResearchDepth,
+    schemas.RunOutcome,
+    schemas.SourceClass,
+    schemas.Stakeholder,
+)
+
+
+def checkpoint_serializer() -> JsonPlusSerializer:
+    return JsonPlusSerializer(allowed_msgpack_modules=[(t.__module__, t.__name__) for t in CHECKPOINT_TYPES])
 
 
 def build_graph(deps: Deps, retry: RetryPolicy = TRANSIENT_RETRY) -> StateGraph[ResearchState]:
@@ -74,7 +100,7 @@ def build_graph(deps: Deps, retry: RetryPolicy = TRANSIENT_RETRY) -> StateGraph[
 def compile_app(
     deps: Deps, checkpointer: BaseCheckpointSaver[str], retry: RetryPolicy = TRANSIENT_RETRY
 ) -> CompiledStateGraph[ResearchState]:
-    # Production: checkpointer = MongoDBSaver(MongoClient(MONGODB_URI), db_name="agent_checkpoints")
+    # Production: MongoDBSaver(MongoClient(MONGODB_URI), db_name="agent_checkpoints", serde=checkpoint_serializer())
     return build_graph(deps, retry).compile(checkpointer=checkpointer)
 
 
