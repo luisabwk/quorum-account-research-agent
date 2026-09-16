@@ -19,7 +19,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 
 from account_research_agent.llm import Message, ModelRouter, ProviderUnavailableError
 from account_research_agent.nodes import Deps
-from account_research_agent.orchestrator import _config, checkpoint_serializer, compile_app, rerun
+from account_research_agent.orchestrator import checkpoint_serializer, compile_app, rerun, run_config
 from account_research_agent.salesforce_sync import (
     CompositeRequest,
     OutboxEntry,
@@ -267,11 +267,11 @@ def main() -> None:
 
     section(f"1. Research run for {mock.ACCOUNT.name}")
     start: ResearchState = {"run_id": "run-001", "parent_run_id": None, "account": mock.ACCOUNT, "entry": "prioritize"}
-    for chunk in app.stream(start, _config("run-001"), stream_mode="updates"):
+    for chunk in app.stream(start, run_config("run-001"), stream_mode="updates"):
         for node, update in chunk.items():
             describe(node, update or {})
 
-    state = app.get_state(_config("run-001")).values
+    state = app.get_state(run_config("run-001")).values
     draft = state["draft"]
     section("2. Result the SDR reviews")
     print(f"outcome: {state['outcome']}\nmodels: {json.dumps(state['models_used'], indent=2)}\n")

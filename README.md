@@ -76,6 +76,26 @@ Runs the real orchestrator, rules, prompts and Salesforce worker on a fictional 
 
 The full output is in [`examples/sample_output.txt`](examples/sample_output.txt). The three research branches run in parallel, so their lines can print in a different order on your machine; the results are the same.
 
+## Flow viewer
+
+A visual inspector for five mock runs, in the style of a workflow canvas: pick a run, see the path the agent took, and click any step to see its input, its output, the documents the researchers found, and every model call with the full prompt.
+
+```bash
+python examples/export_traces.py
+python examples/flow_viewer/build_viewer.py
+open examples/flow_viewer/flow_viewer.html
+```
+
+| Run | What it shows |
+|---|---|
+| Strong account, every guardrail fires | Stale, fabricated and overstated evidence rejected; provider fallback; a draft with a bad citation rewritten |
+| Existing customer, skipped at D1 | The run stops before any tool or model call |
+| Mid-fit account with thin evidence | Nothing verifies, two branches are re-researched once, then the account goes to a human |
+| News API down, drafts too generic | A permanent tool error is recorded and the run continues; both drafts fail the judge |
+| SDR rerun: the contact left the company | Only the stakeholder branch runs again; the rest comes from the parent run's checkpoint |
+
+Scenarios are in [`examples/scenarios.py`](examples/scenarios.py). The orchestrator, rules, prompts and Salesforce mapping in these runs are the real code; only tool results and model answers are scripted.
+
 ## What is pseudocode
 
 Calls that need credentials are pseudocode comments behind typed interfaces, so wiring the real service does not change the orchestration:

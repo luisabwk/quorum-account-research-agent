@@ -1,0 +1,27 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Account Research Runs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>/*CSS*/</style>
+<div class="app">
+  <header class="topbar">
+    <h1>Account Research Runs</h1>
+    <span class="chip">Mock data · fictional accounts</span>
+    <span class="spacer"></span>
+    <div class="legend"><span><i></i>path taken</span><span><i class="dash"></i>not taken</span><span>click a step to inspect its data</span></div>
+  </header>
+  <nav class="runs" id="runs" aria-label="Runs"></nav>
+  <main class="center">
+    <div class="scenario-head" id="scenario"></div>
+    <div class="canvas-wrap" id="canvas">
+      <div class="zoom"><button data-zoom="fit" aria-pressed="true">Fit</button><button data-zoom="full" aria-pressed="false">100%</button></div>
+      <div class="stage" id="stage"></div>
+    </div>
+    <div class="timeline" id="timeline"></div>
+  </main>
+  <aside class="inspector" id="inspector" aria-live="polite"></aside>
+</div>
+<script type="application/json" id="traces">/*DATA*/</script>
+<script>/*VIEWS*/</script>
+<script>/*APP*/</script>

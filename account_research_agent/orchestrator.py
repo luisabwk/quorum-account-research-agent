@@ -104,18 +104,23 @@ def compile_app(
     return build_graph(deps, retry).compile(checkpointer=checkpointer)
 
 
-def _config(run_id: str) -> RunnableConfig:
+def run_config(run_id: str) -> RunnableConfig:
     return {"configurable": {"thread_id": run_id}, "recursion_limit": RECURSION_LIMIT}
 
 
 def run_account(app: CompiledStateGraph[ResearchState], account: AccountInput, run_id: str) -> ResearchState:
     start: ResearchState = {"run_id": run_id, "parent_run_id": None, "account": account, "entry": "prioritize"}
-    return cast(ResearchState, app.invoke(start, _config(run_id)))
+    return cast(ResearchState, app.invoke(start, run_config(run_id)))
 
 
 def rerun(app: CompiledStateGraph[ResearchState], deps: Deps, request: RerunRequest, run_id: str) -> ResearchState:
     """Start a new run seeded from the parent run's last checkpoint (section 1.5)."""
-    parent = cast(ResearchState, app.get_state(_config(request.parent_run_id)).values)
+    return cast(ResearchState, app.invoke(rerun_seed(app, deps, request, run_id), run_config(run_id)))
+
+
+def rerun_seed(app: CompiledStateGraph[ResearchState], deps: Deps, request: RerunRequest, run_id: str) -> ResearchState:
+    """Check the daily cap and build the rerun's starting state, without running it."""
+    parent = cast(ResearchState, app.get_state(run_config(request.parent_run_id)).values)
     if not parent:
         raise ValueError(f"no checkpoint for parent run {request.parent_run_id}")
     account: AccountInput = parent["account"]
@@ -147,5 +152,4 @@ def rerun(app: CompiledStateGraph[ResearchState], deps: Deps, request: RerunRequ
         }
     else:
         seed |= {"entry": "prioritize", "force_depth": ResearchDepth.DEEP}
-
-    return cast(ResearchState, app.invoke(seed, _config(run_id)))
+    return seed
