@@ -1,0 +1,37 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "account-research-agent"
+version = "0.1.0"
+description = "Account Research Agent for Quorum SDRs: LangGraph orchestrator, grounded outreach prompt, Salesforce outbox sync."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+dependencies = ["langgraph>=1.2,<2", "langchain-core>=1.6", "pydantic>=2.13"]
+
+[project.optional-dependencies]
+dev = ["pytest>=9", "ruff>=0.16", "mypy>=2.3"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["account_research_agent"]
+
+[tool.ruff]
+line-length = 120
+include = ["account_research_agent/**/*.py", "tests/**/*.py"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "N", "SIM", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+# Few-shot examples are prompt text; wrapping them would change what the model sees.
+"account_research_agent/prompts.py" = ["E501"]
+
+[tool.mypy]
+strict = true
+packages = ["account_research_agent", "tests"]
+plugins = ["pydantic.mypy"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
