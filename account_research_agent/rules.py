@@ -41,6 +41,7 @@ CONFIDENCE_FLOOR = 0.3
 
 
 def execution_priority(account: AccountInput) -> float:
+    """D1 priority from 0 to 1, from signals that exist before any research."""
     return round(
         0.4 * account.icp_fit + 0.3 * account.intent_score / 100 + 0.3 * account.engagement_score / 100,
         4,
@@ -48,6 +49,7 @@ def execution_priority(account: AccountInput) -> float:
 
 
 def choose_depth(account: AccountInput, priority: float) -> ResearchDepth:
+    """D1 depth: skip, light or deep."""
     # Reason: customers belong to Account Management, not SDR outbound.
     if account.is_customer or priority < SKIP_BELOW:
         return ResearchDepth.SKIP
@@ -57,6 +59,7 @@ def choose_depth(account: AccountInput, priority: float) -> ResearchDepth:
 
 
 def statement_fingerprint(claim: Claim) -> str:
+    """Same source and same normalized statement means a duplicate claim."""
     normalized = " ".join(claim.statement.lower().split())
     return hashlib.sha256(f"{claim.content_sha256}|{normalized}".encode()).hexdigest()
 
@@ -104,6 +107,7 @@ def validate_claims(claims: Iterable[Claim], now: datetime) -> list[Claim]:
 
 
 def validate_stakeholders(stakeholders: Iterable[Stakeholder], now: datetime) -> list[Stakeholder]:
+    """D2 for people: right company, verified recently, and a trusted enough source."""
     result: list[Stakeholder] = []
     for person in sorted(stakeholders, key=lambda s: s.stakeholder_id):
         if person.status is EvidenceStatus.REJECTED:
@@ -122,6 +126,7 @@ def validate_stakeholders(stakeholders: Iterable[Stakeholder], now: datetime) ->
 
 
 def incomplete_branches(claims: list[Claim], stakeholders: list[Stakeholder]) -> list[Branch]:
+    """Branches below their minimum of verified evidence. The graph researches these again once."""
     verified_claims = [c for c in claims if c.status is EvidenceStatus.VERIFIED]
     counts = {
         Branch.REGULATORY: sum(c.branch is Branch.REGULATORY for c in verified_claims),

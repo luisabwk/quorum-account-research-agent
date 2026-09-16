@@ -29,35 +29,47 @@ class SourceClass(IntEnum):
 
 
 class Branch(StrEnum):
+    """The three research branches that run in parallel."""
+
     REGULATORY = "regulatory"
     STAKEHOLDER = "stakeholder"
     NEWS = "news"
 
 
 class ClaimType(StrEnum):
+    """Decides the freshness window a claim must meet in D2."""
+
     REGULATORY = "regulatory"
     ADVOCACY = "advocacy"
 
 
 class EvidenceStatus(StrEnum):
+    """D2 result for a claim or a person."""
+
     VERIFIED = "verified"
     NEEDS_REVIEW = "needs_review"
     REJECTED = "rejected"
 
 
 class ResearchDepth(StrEnum):
+    """D1 result."""
+
     SKIP = "skip"
     LIGHT = "light"
     DEEP = "deep"
 
 
 class RerunScope(StrEnum):
+    """What a rerun executes again (section 1.5)."""
+
     DRAFT_ONLY = "draft_only"
     ONE_BRANCH = "one_branch"
     FULL_DEEPER = "full_deeper"
 
 
 class RunOutcome(StrEnum):
+    """How a run ended. Mapped to a Salesforce picklist."""
+
     SKIPPED = "skipped"
     READY_FOR_REVIEW = "ready_for_review"
     LOW_QUALITY_DRAFT = "low_quality_draft"
@@ -79,6 +91,8 @@ class SourceDocument(BaseModel):
 
 
 class Claim(BaseModel):
+    """One fact about the account, with the evidence and provenance needed to check it."""
+
     claim_id: str
     branch: Branch
     claim_type: ClaimType
@@ -97,6 +111,8 @@ class Claim(BaseModel):
 
 
 class Stakeholder(BaseModel):
+    """A person who may receive the email, with where the data came from."""
+
     stakeholder_id: str
     full_name: str
     title: str
@@ -131,6 +147,8 @@ class AccountInput(BaseModel):
 
 
 class ResearchJudgeVerdict(BaseModel):
+    """Output of the research judge. Every id listed here is rejected."""
+
     unsupported_claim_ids: list[str] = Field(default_factory=list)
     wrong_company_stakeholder_ids: list[str] = Field(default_factory=list)
     contradictions: list[str] = Field(default_factory=list)
@@ -138,6 +156,8 @@ class ResearchJudgeVerdict(BaseModel):
 
 
 class AccountBrief(BaseModel):
+    """Output of the synthesis step, shown to the SDR in Slack and Salesforce."""
+
     summary: str
     commercial_hypothesis: str
     outreach_angle: str
@@ -146,6 +166,8 @@ class AccountBrief(BaseModel):
 
 
 class KBPassage(BaseModel):
+    """One approved passage of the Quorum knowledge base."""
+
     kb_id: str
     title: str
     text: str
@@ -153,6 +175,8 @@ class KBPassage(BaseModel):
 
 
 class OutreachDraft(BaseModel):
+    """Output of the personalization step. It is never sent automatically."""
+
     stakeholder_id: str
     subject: str = Field(max_length=80)
     body: str = Field(max_length=1200)
@@ -161,6 +185,8 @@ class OutreachDraft(BaseModel):
 
 
 class DeliveryJudgeVerdict(BaseModel):
+    """Output of the delivery judge, scored on the rubric in its prompt."""
+
     groundedness: int = Field(ge=1, le=5)
     approved_capabilities_only: bool
     relevance: int = Field(ge=1, le=5)
@@ -179,6 +205,8 @@ class DeliveryJudgeVerdict(BaseModel):
 
 
 class RerunRequest(BaseModel):
+    """An SDR's rerun request from Slack."""
+
     parent_run_id: str
     scope: RerunScope
     branch: Branch | None = None  # required when scope == ONE_BRANCH
@@ -203,6 +231,8 @@ def merge_by_id(key: str) -> Callable[[list[_Item] | None, list[_Item] | None], 
 
 
 class ResearchState(TypedDict, total=False):
+    """State shared by the nodes of one run. Keys with a reducer are merged, not replaced."""
+
     run_id: str
     parent_run_id: str | None
     # Where a run enters the graph. Reruns enter downstream of prioritize.

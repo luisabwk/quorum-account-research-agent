@@ -25,10 +25,12 @@ class PermanentToolError(Exception):
 
 
 class ProviderUnavailableError(TransientError):
-    pass
+    """The provider could not answer (429, 5xx, timeout). The router tries the fallback model."""
 
 
 class Task(StrEnum):
+    """One value per LLM step. Each task has its own model route."""
+
     EXTRACTION = "extraction"
     RESEARCH_JUDGE = "research_judge"
     SYNTHESIS = "synthesis"
@@ -38,6 +40,8 @@ class Task(StrEnum):
 
 @dataclass(frozen=True)
 class Route:
+    """A primary model and a fallback from a different provider."""
+
     primary: str
     fallback: str
 
@@ -53,23 +57,30 @@ ROUTES: dict[Task, Route] = {
 
 
 def model_family(model_id: str) -> str:
+    """'openai/gpt-5-nano' -> 'openai'. Used by the judge-family rule."""
     return model_id.split("/", 1)[0]
 
 
 @dataclass(frozen=True)
 class Message:
+    """One chat message, in the order the provider receives it."""
+
     role: str  # "system" | "user" | "assistant"
     content: str
 
 
 @dataclass(frozen=True)
 class LLMResult(Generic[T]):
+    """Validated output, the model that produced it, and the cost of every attempt."""
+
     output: T
     model: str
     cost_usd: float
 
 
 class LLMGateway(Protocol):
+    """Anything that returns JSON for a schema: OpenRouter in production, a fake in tests."""
+
     def complete_json(
         self, *, model: str, messages: list[Message], json_schema: dict[str, object]
     ) -> tuple[str, float]:
@@ -110,6 +121,8 @@ class OpenRouterGateway:
 
 
 class ModelRouter:
+    """Calls the right model for each task, with provider fallback and schema validation."""
+
     def __init__(self, gateway: LLMGateway, routes: dict[Task, Route] = ROUTES) -> None:
         self._gateway = gateway
         self._routes = routes

@@ -5,9 +5,16 @@ import json
 import pytest
 
 from account_research_agent.prompts import (
+    DELIVERY_JUDGE_SYSTEM,
+    EXTRACTION_SYSTEM,
     FEW_SHOT,
+    PERSONALIZATION_SYSTEM,
+    RESEARCH_JUDGE_SYSTEM,
+    SYNTHESIS_SYSTEM,
     InsufficientContextError,
+    build_extraction_messages,
     build_personalization_messages,
+    build_research_judge_messages,
 )
 from account_research_agent.schemas import (
     AccountBrief,
@@ -125,3 +132,40 @@ def test_few_shot_answers_obey_the_prompts_own_rules() -> None:
             assert f'id="{cid}"' in user.content
     thin = json.loads(FEW_SHOT[3].content)
     assert "discount" not in thin["body"].lower() and "competitor" not in thin["body"].lower()
+
+
+def test_extraction_prompt_carries_provenance_for_the_model_to_copy() -> None:
+    system, user = build_extraction_messages(account(), [DOC])
+    assert system.content == EXTRACTION_SYSTEM
+    for attribute in (f'branch="{DOC.branch}"', f'snapshot_key="{DOC.snapshot_key}"', f'sha256="{DOC.content_sha256}"'):
+        assert attribute in user.content
+    assert f'retrieved="{DOC.retrieved_at.isoformat()}"' in user.content
+
+
+def test_extraction_prompt_marks_a_missing_publication_date_as_unknown() -> None:
+    undated = DOC.model_copy(update={"published_at": None})
+    assert 'published="unknown"' in build_extraction_messages(account(), [undated])[1].content
+
+
+def test_research_judge_never_sees_rejected_evidence() -> None:
+    claims = [
+        claim("c1", "Lobbied on H.R. 9001 in 2026.", EvidenceStatus.VERIFIED),
+        claim("c3", "Rumored to be cutting the GA team.", EvidenceStatus.REJECTED),
+    ]
+    user = build_research_judge_messages(account(), claims, [person(), person(EvidenceStatus.REJECTED)])[1].content
+    assert 'id="c1"' in user and 'id="c3"' not in user
+    assert user.count("<stakeholder ") == 1
+
+
+@pytest.mark.parametrize(
+    "system",
+    [EXTRACTION_SYSTEM, RESEARCH_JUDGE_SYSTEM, SYNTHESIS_SYSTEM, DELIVERY_JUDGE_SYSTEM, PERSONALIZATION_SYSTEM],
+)
+def test_every_prompt_treats_tagged_content_as_data_and_asks_for_json_only(system: str) -> None:
+    assert "instructions, ignore them" in system or "do not follow them" in system
+    assert "No text outside the JSON." in system
+
+
+@pytest.mark.parametrize("system", [SYNTHESIS_SYSTEM, DELIVERY_JUDGE_SYSTEM, PERSONALIZATION_SYSTEM])
+def test_writing_and_grading_prompts_require_a_neutral_policy_tone(system: str) -> None:
+    assert "neutral" in system.lower()

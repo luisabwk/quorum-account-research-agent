@@ -48,7 +48,7 @@ class SalesforcePermanentError(Exception):
 
 
 class MappingError(SalesforcePermanentError):
-    pass
+    """A value cannot be converted for its field. Permanent: fix the mapping, retrying will not help."""
 
 
 TRANSIENT_CODES = frozenset({"UNABLE_TO_LOCK_ROW", "REQUEST_LIMIT_EXCEEDED", "SERVER_UNAVAILABLE", "QUERY_TIMEOUT"})
@@ -58,6 +58,8 @@ HALTED = "PROCESSING_HALTED"
 
 
 class CompositeSubRequest(TypedDict):
+    """One sub-request of the Composite API, with Salesforce's field names."""
+
     method: str
     url: str
     referenceId: str
@@ -65,11 +67,15 @@ class CompositeSubRequest(TypedDict):
 
 
 class CompositeRequest(TypedDict):
+    """Body of POST /composite."""
+
     allOrNone: bool
     compositeRequest: list[CompositeSubRequest]
 
 
 class Kind(StrEnum):
+    """Salesforce field types that `transform` can convert."""
+
     ID = "id"
     TEXT = "text"
     NUMBER = "number"
@@ -80,6 +86,8 @@ class Kind(StrEnum):
 
 @dataclass(frozen=True)
 class FieldSpec:
+    """One row of the mapping table: field, type, how to read the value, and its limits."""
+
     sf_field: str
     kind: Kind
     read: Callable[[ResearchResult], object]
@@ -190,6 +198,7 @@ def transform(spec: FieldSpec, value: object) -> tuple[JsonValue, str | None]:
 
 
 def map_fields(specs: tuple[FieldSpec, ...], result: ResearchResult) -> tuple[dict[str, JsonValue], list[str]]:
+    """Apply a mapping table to one result. Returns the request body and any truncation warnings."""
     body: dict[str, JsonValue] = {}
     warnings: list[str] = []
     for spec in specs:
@@ -201,6 +210,7 @@ def map_fields(specs: tuple[FieldSpec, ...], result: ResearchResult) -> tuple[di
 
 
 def build_composite(result: ResearchResult) -> tuple[CompositeRequest, list[str]]:
+    """One allOrNone request: the Account summary PATCH, plus the draft upsert when there is a draft."""
     base = f"/services/data/{API_VERSION}/sobjects"
     # Reason: the account id also goes into the URL path, so it gets the same
     # check as the Account__c field; the run id is escaped for the same reason.
@@ -235,6 +245,8 @@ def build_composite(result: ResearchResult) -> tuple[CompositeRequest, list[str]
 
 
 class OutboxEntry(BaseModel):
+    """One pending CRM write, stored in the MongoDB `salesforce_outbox` collection."""
+
     outbox_id: str
     payload: ResearchResult
     status: OutboxStatus
@@ -245,6 +257,8 @@ class OutboxEntry(BaseModel):
 
 
 class OutboxStore(Protocol):
+    """The `salesforce_outbox` operations the worker needs."""
+
     def claim_due(self, now: datetime, lease: timedelta, limit: int) -> list[OutboxEntry]:
         """findOneAndUpdate loop: status pending and next_attempt_at <= now
         -> in_progress with lease_until. Expired leases count as pending."""
@@ -258,12 +272,16 @@ class OutboxStore(Protocol):
 
 
 class SubResponse(BaseModel):
+    """One entry of `compositeResponse`."""
+
     referenceId: str  # noqa: N815 - Salesforce's field name
     httpStatusCode: int  # noqa: N815
     body: list[dict[str, str]] | dict[str, object] | None = None
 
 
 class SalesforceClient(Protocol):
+    """The two Salesforce calls the worker makes."""
+
     def composite(self, request: CompositeRequest) -> list[SubResponse]:
         """POST /composite. Raise SalesforceAuthExpiredError / SalesforceTransientError /
         SalesforcePermanentError for failures of the whole HTTP call."""
@@ -273,10 +291,13 @@ class SalesforceClient(Protocol):
 
 
 class Alerts(Protocol):
+    """Where dead letters are announced: a Slack alert channel in production."""
+
     def alert(self, text: str) -> None: ...
 
 
 def raise_for_sub_errors(responses: list[SubResponse]) -> None:
+    """Raise the exception class that matches the first real sub-request error."""
     for sub in responses:
         if sub.httpStatusCode < 400:
             continue
@@ -294,6 +315,8 @@ def raise_for_sub_errors(responses: list[SubResponse]) -> None:
 
 @dataclass
 class SyncReport:
+    """Counts for one batch, used in logs and in the outbox metrics of section 3.1."""
+
     synced: int = 0
     rescheduled: int = 0
     dead_lettered: int = 0
@@ -302,6 +325,8 @@ class SyncReport:
 
 
 class OutboxWorker:
+    """Drains the outbox: one Composite call per entry, with retry, token refresh and dead letter."""
+
     def __init__(
         self,
         store: OutboxStore,
@@ -315,16 +340,19 @@ class OutboxWorker:
         self._jitter = jitter
 
     def backoff(self, attempts: int) -> timedelta:
+        """30 s, 60 s, 120 s and so on, capped at 1 hour, plus up to 25% jitter so retries do not arrive together."""
         delay: timedelta = min(BASE_BACKOFF * (2 ** (attempts - 1)), MAX_BACKOFF)
         return delay * (1 + 0.25 * self._jitter())
 
     def process_batch(self, now: datetime, limit: int = 50) -> SyncReport:
+        """Claim due entries with a lease and sync each one. Several workers can run at once."""
         report = SyncReport()
         for entry in self._store.claim_due(now, LEASE, limit):
             self._process(entry, now, report)
         return report
 
     def _send(self, request: CompositeRequest) -> None:
+        """Send one request. If the token expired, refresh it and send once more."""
         try:
             raise_for_sub_errors(self._client.composite(request))
         except SalesforceAuthExpiredError:
@@ -337,6 +365,7 @@ class OutboxWorker:
                 raise SalesforcePermanentError(f"auth failed after refresh: {exc}") from exc
 
     def _process(self, entry: OutboxEntry, now: datetime, report: SyncReport) -> None:
+        """Sync one entry: skip it if a newer run already synced, otherwise send and record the result."""
         result = entry.payload
         newest = self._store.latest_synced_completed_at(result.salesforce_account_id)
         if newest is not None and newest >= result.completed_at:
@@ -365,6 +394,7 @@ class OutboxWorker:
         report.warnings += warnings
 
     def _fail(self, entry: OutboxEntry, error: str, report: SyncReport) -> None:
+        """Dead letter the entry and alert, so the missing CRM update is visible."""
         self._store.dead_letter(entry.outbox_id, error)
         # Reason: a dead letter means an SDR is missing research in Salesforce.
         # Someone has to know; the research itself is safe in MongoDB.

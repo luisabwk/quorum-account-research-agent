@@ -42,6 +42,8 @@ _SENIORITY = ("chief", "svp", "vp", "vice president", "head", "director", "manag
 
 @dataclass(frozen=True)
 class Deps:
+    """Everything the nodes need from outside the graph. Tests pass in-memory fakes."""
+
     router: ModelRouter
     tools: ResearchTools
     kb: KnowledgeBase
@@ -51,10 +53,12 @@ class Deps:
 
 
 def verified_ids(claims: Sequence[Claim]) -> set[str]:
+    """Ids of the claims that passed D2 and the research judge."""
     return {c.claim_id for c in claims if c.status is EvidenceStatus.VERIFIED}
 
 
 def pick_stakeholder(stakeholders: Sequence[Stakeholder]) -> Stakeholder | None:
+    """The most senior verified person, by title. Ties break on id, so runs are reproducible."""
     verified = [s for s in stakeholders if s.status is EvidenceStatus.VERIFIED]
 
     def rank(person: Stakeholder) -> tuple[int, str]:
@@ -66,6 +70,7 @@ def pick_stakeholder(stakeholders: Sequence[Stakeholder]) -> Stakeholder | None:
 
 
 def branch_sends(state: ResearchState, branches: Sequence[Branch], attempt: int) -> list[Send]:
+    """One `Send` per branch. LangGraph runs them in parallel."""
     return [
         Send("research_branch", BranchTask(branch=b, account=state["account"], depth=state["depth"], attempt=attempt))
         for b in branches
@@ -76,12 +81,15 @@ _Evidence = TypeVar("_Evidence", Claim, Stakeholder)
 
 
 def _reject(item: _Evidence, reason: str) -> _Evidence:
+    """Copy of the item marked rejected, keeping earlier rejection reasons."""
     return item.model_copy(
         update={"status": EvidenceStatus.REJECTED, "rejection_reasons": [*item.rejection_reasons, reason]}
     )
 
 
 class ResearchNodes:
+    """Graph nodes. Each one returns only the state keys it changes."""
+
     def __init__(self, deps: Deps) -> None:
         self.deps = deps
 
@@ -143,6 +151,7 @@ class ResearchNodes:
         }
 
     def research_judge(self, state: ResearchState) -> ResearchState:
+        """LLM audit of the research, then decide which branches to research again (once)."""
         claims, people = state.get("claims", []), state.get("stakeholders", [])
         update: ResearchState = {"branches_to_retry": []}
         if verified_ids(claims) or pick_stakeholder(people) is not None:
@@ -189,6 +198,7 @@ class ResearchNodes:
         return update
 
     def synthesize(self, state: ResearchState) -> ResearchState:
+        """Account brief from verified claims and approved KB passages."""
         claims = state["claims"]
         known = verified_ids(claims)
         query = " ".join(c.statement for c in claims if c.claim_id in known)[:2000]
@@ -208,6 +218,7 @@ class ResearchNodes:
         }
 
     def personalize(self, state: ResearchState) -> ResearchState:
+        """Draft the email. On the retry, the prompt carries the rejected draft and the critique."""
         stakeholder = pick_stakeholder(state.get("stakeholders", []))
         brief = state.get("brief")
         if stakeholder is None or brief is None:
@@ -231,6 +242,7 @@ class ResearchNodes:
         }
 
     def delivery_judge(self, state: ResearchState) -> ResearchState:
+        """Grade the draft: a citation check in code first, then an LLM judge from another family."""
         draft = state["draft"]
         assert draft is not None  # Reason: route_after_personalize guarantees a draft here.
         bad_ids = (set(draft.cited_claim_ids) - verified_ids(state["claims"])) | (
@@ -267,6 +279,7 @@ class ResearchNodes:
         return update
 
     def finalize(self, state: ResearchState) -> ResearchState:
+        """Store the result with its outbox entry, then post it for SDR review."""
         result = to_result(state, self.deps.now())
         # Reason: storage first, Slack second. Both calls are idempotent by
         # run_id, so a RetryPolicy retry after a Slack failure is safe.
@@ -276,6 +289,7 @@ class ResearchNodes:
 
 
 def route_entry(state: ResearchState) -> list[Send] | str:
+    """Where a run starts: D1 for new runs, one branch or personalize for reruns."""
     entry = state.get("entry", "prioritize")
     if entry == "branch":
         branch = state.get("rerun_branch")
@@ -286,12 +300,14 @@ def route_entry(state: ResearchState) -> list[Send] | str:
 
 
 def route_after_prioritize(state: ResearchState) -> list[Send] | str:
+    """Skipped accounts go straight to finalize. The rest fan out to every branch."""
     if state.get("outcome") is RunOutcome.SKIPPED:
         return "finalize"
     return branch_sends(state, list(Branch), attempt=0)
 
 
 def route_after_research_judge(state: ResearchState) -> list[Send] | str:
+    """Research incomplete branches again (at most once), otherwise go to scoring."""
     retry = state.get("branches_to_retry", [])
     if retry:
         return branch_sends(state, retry, attempt=state["research_retries"])
@@ -299,18 +315,22 @@ def route_after_research_judge(state: ResearchState) -> list[Send] | str:
 
 
 def route_after_score(state: ResearchState) -> Literal["synthesize", "finalize"]:
+    """Low confidence ends the run for human research instead of drafting."""
     return "finalize" if state.get("outcome") is RunOutcome.NEEDS_HUMAN_RESEARCH else "synthesize"
 
 
 def route_after_personalize(state: ResearchState) -> Literal["delivery_judge", "finalize"]:
+    """Without a stakeholder or a brief there is no draft to judge."""
     return "finalize" if state.get("outcome") is RunOutcome.NEEDS_HUMAN_RESEARCH else "delivery_judge"
 
 
 def route_after_delivery_judge(state: ResearchState) -> Literal["personalize", "finalize"]:
+    """Rewrite once after a failed grade. Finalize as soon as an outcome is set."""
     return "finalize" if "outcome" in state else "personalize"
 
 
 def to_result(state: ResearchState, now: datetime) -> ResearchResult:
+    """Flatten the final state into what MongoDB, Slack and the Salesforce outbox receive."""
     verified = sorted(
         (c for c in state.get("claims", []) if c.status is EvidenceStatus.VERIFIED),
         key=lambda c: (c.source_class, c.claim_id),

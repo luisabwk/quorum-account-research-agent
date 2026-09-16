@@ -21,6 +21,8 @@ from .schemas import (
 
 
 class ResearchTools(Protocol):
+    """The research tools of section 1.4, grouped by branch."""
+
     def gather(self, branch: Branch, account: AccountInput, depth: ResearchDepth, attempt: int) -> list[SourceDocument]:
         """Call the branch's tools and return normalized, snapshotted documents.
 
@@ -30,12 +32,16 @@ class ResearchTools(Protocol):
 
 
 class KnowledgeBase(Protocol):
+    """Retrieval over the approved Quorum knowledge base."""
+
     def retrieve(self, query: str, top_k: int = 5) -> list[KBPassage]:
         """Approved passages only (Chroma filter `status == "approved"`)."""
         ...
 
 
 class RunRepository(Protocol):
+    """MongoDB operations the graph needs."""
+
     def reserve_rerun(self, salesforce_account_id: str, daily_limit: int) -> bool:
         """Atomically count a rerun against today's cap. False if the cap is reached."""
         ...
@@ -47,6 +53,8 @@ class RunRepository(Protocol):
 
 
 class ReviewChannel(Protocol):
+    """Where finished runs go for human review."""
+
     def post_review(self, result: ResearchResult) -> None:
         """Post brief, draft, sources and approve/edit/reject/rerun buttons to Slack."""
         ...
@@ -58,15 +66,20 @@ class LiveResearchTools:
     def gather(self, branch: Branch, account: AccountInput, depth: ResearchDepth, attempt: int) -> list[SourceDocument]:
         # Reason: a retry after an incomplete branch widens the search window
         # instead of repeating the exact same queries.
+        # Deep research looks further back and keeps more items per tool.
         lookback_days = (365 if depth is ResearchDepth.DEEP else 180) * (attempt + 1)
         max_items = 15 if depth is ResearchDepth.DEEP else 5
 
         if branch is Branch.REGULATORY:
+            # Quorum's own legislative data first; Open States only while internal access is not available.
+            # state = quorum_legislative_search(account=account.name, since_days=lookback_days)
+            # if state is None:
+            #     state = openstates_search_bills(q=account.name, since_days=lookback_days)
             # filings = lda_search_filings(client_name=account.name, since_days=lookback_days)
             # bills = [congress_search_bills(bill_id=b) for b in filings.bill_ids[:max_items]]
             # rules = federal_register_search(term=account.name, since_days=lookback_days)
             # risk = sec_edgar_filings(domain=account.domain, form="10-K")  # None if private
-            # return [store_snapshot(doc) for doc in normalize(filings, bills, rules, risk)]
+            # return [store_snapshot(doc) for doc in normalize(state, filings, bills, rules, risk)]
             pass
         elif branch is Branch.STAKEHOLDER:
             # contacts = salesforce_get_contacts(account.salesforce_account_id, titles=GA_TITLES)

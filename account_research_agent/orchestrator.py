@@ -41,7 +41,7 @@ TRANSIENT_RETRY = RetryPolicy(max_attempts=3, initial_interval=1.0, backoff_fact
 
 
 class RerunLimitExceededError(Exception):
-    pass
+    """Raised when an account has used all of today's reruns."""
 
 
 # Types stored in checkpoints. Reason: LangGraph deserializes checkpoints by
@@ -66,10 +66,16 @@ CHECKPOINT_TYPES = (
 
 
 def checkpoint_serializer() -> JsonPlusSerializer:
+    """Serializer for the MongoDB checkpointer, limited to CHECKPOINT_TYPES."""
     return JsonPlusSerializer(allowed_msgpack_modules=[(t.__module__, t.__name__) for t in CHECKPOINT_TYPES])
 
 
 def build_graph(deps: Deps, retry: RetryPolicy = TRANSIENT_RETRY) -> StateGraph[ResearchState]:
+    """Wire nodes and routers into the graph in the module docstring.
+
+    Every edge that goes back (re-research, rewrite) is conditional and bounded
+    by a counter in state.
+    """
     n = nodes.ResearchNodes(deps)
     graph = StateGraph(ResearchState)
     # Deterministic nodes (prioritize, validate, score) have no retry: they
@@ -100,15 +106,18 @@ def build_graph(deps: Deps, retry: RetryPolicy = TRANSIENT_RETRY) -> StateGraph[
 def compile_app(
     deps: Deps, checkpointer: BaseCheckpointSaver[str], retry: RetryPolicy = TRANSIENT_RETRY
 ) -> CompiledStateGraph[ResearchState]:
+    """Compile the graph with a checkpointer, so runs can resume and reruns can read the parent run."""
     # Production: MongoDBSaver(MongoClient(MONGODB_URI), db_name="agent_checkpoints", serde=checkpoint_serializer())
     return build_graph(deps, retry).compile(checkpointer=checkpointer)
 
 
 def run_config(run_id: str) -> RunnableConfig:
+    """One checkpoint thread per run: thread_id is the run_id, so a rerun never overwrites its parent."""
     return {"configurable": {"thread_id": run_id}, "recursion_limit": RECURSION_LIMIT}
 
 
 def run_account(app: CompiledStateGraph[ResearchState], account: AccountInput, run_id: str) -> ResearchState:
+    """Research one account from the start. Entry point for scheduled and SDR-triggered runs."""
     start: ResearchState = {"run_id": run_id, "parent_run_id": None, "account": account, "entry": "prioritize"}
     return cast(ResearchState, app.invoke(start, run_config(run_id)))
 
