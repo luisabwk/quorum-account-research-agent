@@ -33,8 +33,8 @@ GATE = """<!doctype html>
 <title>Account Research Runs</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;500&display=swap">
 <style>
-  :root { --ground: #eef1f4; --dots: #cbd3dc; --surface: #fff; --ink: #15202b; --muted: #5a6776; --line: #d9dfe6; --accent: #1f5faf; --bad: #b8432f; }
-  @media (prefers-color-scheme: dark) { :root { --ground: #0e1419; --dots: #1f2a35; --surface: #151d25; --ink: #e4eaf0; --muted: #93a1b0; --line: #26323e; --accent: #6fa8f5; --bad: #e57a64; } }
+  :root { --ground: #eef1f4; --dots: #cbd3dc; --surface: #fff; --ink: #15202b; --muted: #5a6776; --line: #d9dfe6; --accent: #1f5faf; --on-accent: #ffffff; --bad: #b8432f; }
+  @media (prefers-color-scheme: dark) { :root { --ground: #0e1419; --dots: #1f2a35; --surface: #151d25; --ink: #e4eaf0; --muted: #93a1b0; --line: #26323e; --accent: #6fa8f5; --on-accent: #0e1419; --bad: #e57a64; } }
   * { box-sizing: border-box; }
   body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 16px; color: var(--ink);
     font: 15px/1.5 "IBM Plex Sans", system-ui, sans-serif; background: var(--ground);
@@ -44,7 +44,7 @@ GATE = """<!doctype html>
   p { margin: 0; color: var(--muted); font-size: 13.5px; }
   label { font-size: 13px; font-weight: 500; }
   input { font: inherit; padding: 9px 11px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); }
-  button { font: 500 14px/1 "IBM Plex Sans", sans-serif; padding: 11px; border: 0; border-radius: 6px; background: var(--accent); color: #fff; cursor: pointer; }
+  button { font: 500 14px/1 "IBM Plex Sans", sans-serif; padding: 11px; border: 0; border-radius: 6px; background: var(--accent); color: var(--on-accent); cursor: pointer; }
   input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .err { color: var(--bad); min-height: 1.4em; font-size: 13px; }
 </style>
