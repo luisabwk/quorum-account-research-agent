@@ -74,7 +74,7 @@ Runs the real orchestrator, rules, prompts and Salesforce worker on a fictional 
 | An SDR asks for a shorter draft | Draft-only rerun from the checkpoint: no tool calls, 2 model calls |
 | Salesforce row lock on the older run | Retry scheduled; the newer run syncs first, so the older one is marked superseded |
 
-The full output is in [`examples/sample_output.txt`](examples/sample_output.txt).
+The full output is in [`examples/sample_output.txt`](examples/sample_output.txt). The three research branches run in parallel, so their lines can print in a different order on your machine; the results are the same.
 
 ## What is pseudocode
 
