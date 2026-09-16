@@ -94,6 +94,14 @@ open examples/flow_viewer/flow_viewer.html
 | News API down, drafts too generic | A permanent tool error is recorded and the run continues; both drafts fail the judge |
 | SDR rerun: the contact left the company | Only the stakeholder branch runs again; the rest comes from the parent run's checkpoint |
 
+Or run everything in one command, which also opens the viewer:
+
+```bash
+python run_demo.py
+```
+
+A hosted copy is at [luisabwk.github.io/quorum-account-research-agent](https://luisabwk.github.io/quorum-account-research-agent/). It is encrypted in the browser (AES-256-GCM, key derived from a password with PBKDF2); the password is in the submission document. `examples/flow_viewer/encrypt_for_pages.py` builds it.
+
 Scenarios are in [`examples/scenarios.py`](examples/scenarios.py). The orchestrator, rules, prompts and Salesforce mapping in these runs are the real code; only tool results and model answers are scripted.
 
 ## What is pseudocode
